@@ -46,7 +46,7 @@ func pivotRoot(root string) error {
 	return os.Remove(pivotDir)
 }
 
-func setUpMount() {
+func setupMount() {
 	pwd, err := os.Getwd()
 	if err != nil {
 		log.Errorf("Get current location error %v", err)
@@ -64,19 +64,19 @@ func setUpMount() {
 // RunContainerInitProcess is a function.
 func RunContainerInitProcess() error {
 	cmdArray := readUserCommand()
-	if cmdArray == nil || len(cmdArray) == 0 {
+	if len(cmdArray) == 0 {
 		return fmt.Errorf("Run container get user command error, cmdArray is nil")
 	}
 
-	// setUpMount()
+	// setupMount()
 
 	path, err := exec.LookPath(cmdArray[0])
 	if err != nil {
-		log.Errorf("Exec loop path error %v", err)
+		log.Errorf("Exec look path error %v", err)
 		return err
 	}
-	log.Infof("Find path %s", path)
-	if err := syscall.Exec(path, cmdArray[0:], os.Environ()); err != nil {
+	log.Infof("Found path %s", path)
+	if err := syscall.Exec(path, cmdArray, os.Environ()); err != nil {
 		log.Errorf(err.Error())
 	}
 	return nil

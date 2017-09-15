@@ -36,7 +36,6 @@ func (c *CgroupManager) Set(res *subsystems.ResourceConfig) error {
 
 // Destroy removes the cgroup.
 func (c *CgroupManager) Destroy() error {
-	logrus.Infoln("This is a test info")
 	for _, subSysIns := range subsystems.SubSystemsIns {
 		if err := subSysIns.Remove(c.Path); err != nil {
 			logrus.Warnf("remove cgroup fail %v", err)

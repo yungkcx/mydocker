@@ -35,5 +35,6 @@ func NewParentProcess(tty bool) (*exec.Cmd, *os.File) {
 		cmd.Stderr = os.Stderr
 	}
 	cmd.ExtraFiles = []*os.File{readPipe}
+	cmd.Dir = "./overlay/container/merged/"
 	return cmd, writePipe
 }

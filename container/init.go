@@ -24,25 +24,78 @@ func readUserCommand() []string {
 	return strings.Split(msgStr, " ")
 }
 
-func pivotRoot(root string) error {
-	if err := syscall.Mount(root, root, "bind", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
-		return fmt.Errorf("Mount rootfs to itself error: %v", err)
-	}
-	pivotDir := filepath.Join(root, ".pivot_root")
-	if err := os.Mkdir(pivotDir, 0777); err != nil {
-		return err
-	}
-	if err := syscall.PivotRoot(root, pivotDir); err != nil {
-		return fmt.Errorf("pivot_error %v", err)
+func realChroot(path string) error {
+	if err := syscall.Chroot(path); err != nil {
+		return fmt.Errorf("error after fallback to chroot: %v", err)
 	}
 	if err := syscall.Chdir("/"); err != nil {
-		return fmt.Errorf("chdir / %v", err)
+		return fmt.Errorf("error changing to new root after chroot: %v", err)
+	}
+	return nil
+}
+
+func pivotRoot(root string) error {
+	// log.Infoln(os.Getpid())
+	// if err := syscall.Mount(root, root, "", syscall.MS_BIND, ""); err != nil {
+	// 	return fmt.Errorf("Error mounting pivot dir before pivot: %v", err)
+	// }
+	// if err := syscall.Mount("overlay", "./merged", "overlay", 0, "upperdir=./upper,lowerdir=./root,workdir=./work"); err != nil {
+	// 	return fmt.Errorf("Error creating overlay: %v", err)
+	// }
+	// if err := os.Chdir("./merged"); err != nil {
+	// 	return fmt.Errorf("Error changing pwd to merged: %v", err)
+	// }
+
+	if err := syscall.Unshare(syscall.CLONE_NEWNS); err != nil {
+		return fmt.Errorf("Error creating mount namespace before pivot: %v", err)
 	}
 
-	pivotDir = filepath.Join("/", ".pivot_root")
-	if err := syscall.Unmount(pivotDir, syscall.MNT_DETACH); err != nil {
-		return fmt.Errorf("unmount pivot_root dir %v", err)
+	pivotDir, err := ioutil.TempDir(root, ".pivot_root")
+	if err != nil {
+		return fmt.Errorf("can't create pivot_dir %v", err)
 	}
+
+	var mounted bool
+	defer func() {
+		if mounted {
+			if errCleanup := syscall.Unmount(pivotDir, syscall.MNT_DETACH); errCleanup != nil {
+				if err == nil {
+					err = errCleanup
+				}
+				return
+			}
+		}
+
+		errCleanup := os.Remove(pivotDir)
+		if errCleanup != nil {
+			errCleanup = fmt.Errorf("Error cleaning up after pivot_root: %v", errCleanup)
+			if err == nil {
+				err = errCleanup
+			}
+		}
+	}()
+
+	if err := syscall.PivotRoot(root, pivotDir); err != nil {
+		log.Infof("Try pivot %s failed, use chroot: %v", root, err)
+		if err := os.Remove(pivotDir); err != nil {
+			return fmt.Errorf("Error removing pivot_dir: %f", err)
+		}
+		return realChroot(root)
+	}
+	mounted = true
+
+	pivotDir = filepath.Join("/", filepath.Base(pivotDir))
+	if err := syscall.Chdir("/"); err != nil {
+		return fmt.Errorf("Error changing to new root: %v", err)
+	}
+	if err := syscall.Mount("", pivotDir, "", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
+		return fmt.Errorf("Error making old root private after pivot: %v", err)
+	}
+	if err := syscall.Unmount(pivotDir, syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("Error while unmounting old root after pivot: %v", err)
+	}
+	mounted = false
+
 	return os.Remove(pivotDir)
 }
 
@@ -56,9 +109,9 @@ func setupMount() {
 
 	pivotRoot(pwd)
 
-	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
-	syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
-	syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
+	// defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	// syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
+	// syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
 }
 
 // RunContainerInitProcess is a function.
@@ -68,15 +121,16 @@ func RunContainerInitProcess() error {
 		return fmt.Errorf("Run container get user command error, cmdArray is nil")
 	}
 
-	// setupMount()
+	setupMount()
 
 	path, err := exec.LookPath(cmdArray[0])
+	// path := filepath.Join("/bin", cmdArray[0])
 	if err != nil {
 		log.Errorf("Exec look path error %v", err)
 		return err
 	}
 	log.Infof("Found path %s", path)
-	if err := syscall.Exec(path, cmdArray, os.Environ()); err != nil {
+	if err := syscall.Exec(path, cmdArray, nil /*os.Environ()*/); err != nil {
 		log.Errorf(err.Error())
 	}
 	return nil

@@ -15,4 +15,6 @@ mydocker
 .glide/
 
 # Files or directories of the container
-proc
+busybox
+busybox.tar
+overlay

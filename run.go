@@ -18,20 +18,21 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig) {
 		return
 	}
 	if err := parent.Start(); err != nil {
-		log.Error(err.Error())
+		log.Errorf("Error parent starting: %v", err)
 	}
 	cgroupManager := cgroups.NewCgroupManager("mydocker-cgroup")
 	defer cgroupManager.Destroy()
 	cgroupManager.Set(res)
 	cgroupManager.Apply(parent.Process.Pid)
 
+	log.Infoln("Parent process started, sending commands")
 	sendInitCommand(comArray, writePipe)
 	parent.Wait()
 }
 
 func sendInitCommand(comArray []string, writePipe *os.File) {
 	command := strings.Join(comArray, " ")
-	log.Infof("command all is %s", command)
+	log.Infof("Command all is %s", command)
 	writePipe.WriteString(command)
 	writePipe.Close()
 }

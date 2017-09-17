@@ -1,8 +1,10 @@
 package cgroups
 
-import "github.com/yungkcx/mydocker/cgroups/subsystems"
+import (
+	"github.com/yungkcx/mydocker/cgroups/subsystems"
 
-import "github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
+)
 
 // CgroupManager is for manage resources.
 type CgroupManager struct {
@@ -38,7 +40,7 @@ func (c *CgroupManager) Set(res *subsystems.ResourceConfig) error {
 func (c *CgroupManager) Destroy() error {
 	for _, subSysIns := range subsystems.SubSystemsIns {
 		if err := subSysIns.Remove(c.Path); err != nil {
-			logrus.Warnf("remove cgroup fail %v", err)
+			log.Warnf("remove cgroup fail %v", err)
 		}
 	}
 	return nil

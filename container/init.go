@@ -35,21 +35,15 @@ func realChroot(path string) error {
 }
 
 func pivotRoot(root string) error {
-	// log.Infoln(os.Getpid())
-	// if err := syscall.Mount(root, root, "", syscall.MS_BIND, ""); err != nil {
-	// 	return fmt.Errorf("Error mounting pivot dir before pivot: %v", err)
-	// }
-	// if err := syscall.Mount("overlay", "./merged", "overlay", 0, "upperdir=./upper,lowerdir=./root,workdir=./work"); err != nil {
-	// 	return fmt.Errorf("Error creating overlay: %v", err)
-	// }
-	// if err := os.Chdir("./merged"); err != nil {
-	// 	return fmt.Errorf("Error changing pwd to merged: %v", err)
-	// }
-
-	if err := syscall.Unshare(syscall.CLONE_NEWNS); err != nil {
-		return fmt.Errorf("Error creating mount namespace before pivot: %v", err)
+	// Mount an overlayfs for the container.
+	if err := syscall.Mount("overlay", filepath.Join(root, "merged"), "overlay", 0, "upperdir=./upper,lowerdir=./root,workdir=./work"); err != nil {
+		return fmt.Errorf("Error creating overlayfs: %v", err)
 	}
-
+	// Chdir to root.
+	root = filepath.Join(root, "merged")
+	if err := os.Chdir(root); err != nil {
+		return fmt.Errorf("Error changing pwd to merged: %v", err)
+	}
 	pivotDir, err := ioutil.TempDir(root, ".pivot_root")
 	if err != nil {
 		return fmt.Errorf("can't create pivot_dir %v", err)
@@ -82,12 +76,14 @@ func pivotRoot(root string) error {
 		}
 		return realChroot(root)
 	}
+	log.Infoln("pivot_root success!")
 	mounted = true
 
-	pivotDir = filepath.Join("/", filepath.Base(pivotDir))
-	if err := syscall.Chdir("/"); err != nil {
-		return fmt.Errorf("Error changing to new root: %v", err)
+	if err := os.Chdir("/"); err != nil {
+		return fmt.Errorf("Error chdir to / after pivot: %v", err)
 	}
+
+	pivotDir = filepath.Join("/", filepath.Base(pivotDir))
 	if err := syscall.Mount("", pivotDir, "", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("Error making old root private after pivot: %v", err)
 	}
@@ -99,39 +95,38 @@ func pivotRoot(root string) error {
 	return os.Remove(pivotDir)
 }
 
-func setupMount() {
+func setupMount() error {
+	if err := os.Chdir("./overlay/container"); err != nil {
+		return fmt.Errorf("Error chdir to container: %v", err)
+	}
 	pwd, err := os.Getwd()
 	if err != nil {
-		log.Errorf("Get current location error %v", err)
-		return
+		return fmt.Errorf("Error getpwd: %v", err)
 	}
-	log.Infof("Current location is %s", pwd)
+	log.Infof("Now location is: %s", pwd)
 
 	pivotRoot(pwd)
 
-	// defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
-	// syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
+	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	if err := syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), ""); err != nil {
+		log.Errorf("Error mounting proc: %v", err)
+	}
 	// syscall.Mount("tmpfs", "/dev", "tmpfs", syscall.MS_NOSUID|syscall.MS_STRICTATIME, "mode=755")
+	return nil
 }
 
 // RunContainerInitProcess is a function.
 func RunContainerInitProcess() error {
-	cmdArray := readUserCommand()
-	if len(cmdArray) == 0 {
-		return fmt.Errorf("Run container get user command error, cmdArray is nil")
-	}
-
-	setupMount()
-
-	path, err := exec.LookPath(cmdArray[0])
-	// path := filepath.Join("/bin", cmdArray[0])
-	if err != nil {
-		log.Errorf("Exec look path error %v", err)
+	args := readUserCommand()
+	if err := setupMount(); err != nil {
 		return err
 	}
-	log.Infof("Found path %s", path)
-	if err := syscall.Exec(path, cmdArray, nil /*os.Environ()*/); err != nil {
-		log.Errorf(err.Error())
+	path, err := exec.LookPath(args[0])
+	if err != nil {
+		return fmt.Errorf("Error lookpath %s: %v", args[0], err)
+	}
+	if err := syscall.Exec(path, args, nil); err != nil {
+		return fmt.Errorf("Error exec container command: %v", err)
 	}
 	return nil
 }

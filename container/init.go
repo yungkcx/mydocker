@@ -12,6 +12,24 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
+// RunContainerInitProcess is a function.
+func RunContainerInitProcess() error {
+	args := readUserCommand()
+	volume, rootURL := args[0], args[1]
+	if err := setupMount(volume, rootURL); err != nil {
+		return err
+	}
+	containerCommand := args[2]
+	path, err := exec.LookPath(containerCommand)
+	if err != nil {
+		return fmt.Errorf("Error lookpath %s: %v", containerCommand, err)
+	}
+	if err := syscall.Exec(path, args[2:], nil); err != nil {
+		return fmt.Errorf("Error exec container command: %v", err)
+	}
+	return nil
+}
+
 func readUserCommand() []string {
 	pipe := os.NewFile(uintptr(3), "pipe")
 	defer pipe.Close()
@@ -35,10 +53,6 @@ func realChroot(path string) error {
 }
 
 func pivotRoot(root string) error {
-	// Mount an overlayfs for the container.
-	if err := syscall.Mount("overlay", filepath.Join(root, "merged"), "overlay", 0, "upperdir=./upper,lowerdir=./root,workdir=./work"); err != nil {
-		return fmt.Errorf("Error creating overlayfs: %v", err)
-	}
 	// Chdir to root.
 	root = filepath.Join(root, "merged")
 	if err := os.Chdir(root); err != nil {
@@ -91,20 +105,32 @@ func pivotRoot(root string) error {
 		return fmt.Errorf("Error while unmounting old root after pivot: %v", err)
 	}
 	mounted = false
+	log.Infoln("Lazy umount old rootfs success!")
 
 	return os.Remove(pivotDir)
 }
 
-func setupMount() error {
-	if err := os.Chdir("./overlay/container"); err != nil {
-		return fmt.Errorf("Error chdir to container: %v", err)
-	}
+func setupMount(volume string, rootURL string) error {
 	pwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("Error getpwd: %v", err)
 	}
 	log.Infof("Now location is: %s", pwd)
 
+	if volume != "" {
+		volumeURLs := strings.Split(volume, ":")
+		if len(volumeURLs) == 2 && volumeURLs[0] != "" && volumeURLs[1] != "" {
+			if volumeURLs[0][0] != '/' {
+				return fmt.Errorf("-v need absolute path")
+			}
+			if err := mountVolume(rootURL, volumeURLs); err != nil {
+				return err
+			}
+			log.Infof("volume mounted success: %q", volumeURLs)
+		} else {
+			return fmt.Errorf("Invalid volume parameter input")
+		}
+	}
 	pivotRoot(pwd)
 
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
@@ -115,18 +141,25 @@ func setupMount() error {
 	return nil
 }
 
-// RunContainerInitProcess is a function.
-func RunContainerInitProcess() error {
-	args := readUserCommand()
-	if err := setupMount(); err != nil {
+func mountVolume(rootURL string, volumeURLs []string) error {
+	parentURL := volumeURLs[0]
+	if exist, err := pathExist(parentURL); err != nil {
 		return err
+	} else if !exist {
+		if err := os.Mkdir(parentURL, 0777); err != nil {
+			return fmt.Errorf("Error: %v", err)
+		}
 	}
-	path, err := exec.LookPath(args[0])
-	if err != nil {
-		return fmt.Errorf("Error lookpath %s: %v", args[0], err)
+	containerURL := filepath.Join(rootURL, "merged", volumeURLs[1])
+	if exist, err := pathExist(containerURL); err != nil {
+		return err
+	} else if !exist {
+		if err := os.Mkdir(containerURL, 0777); err != nil {
+			return fmt.Errorf("Error: %v", err)
+		}
 	}
-	if err := syscall.Exec(path, args, nil); err != nil {
-		return fmt.Errorf("Error exec container command: %v", err)
+	if err := syscall.Mount(parentURL, containerURL, "bind", syscall.MS_BIND, ""); err != nil {
+		return fmt.Errorf("Error mounting volume: %v", err)
 	}
 	return nil
 }

@@ -18,6 +18,10 @@ var runCommand = cli.Command{
 			Usage: "enable tty",
 		},
 		cli.StringFlag{
+			Name:  "v",
+			Usage: "volume",
+		},
+		cli.StringFlag{
 			Name:  "m",
 			Usage: "memory limit",
 		},
@@ -39,12 +43,13 @@ var runCommand = cli.Command{
 			cmdArray = append(cmdArray, arg)
 		}
 		tty := context.Bool("ti")
+		volume := context.String("v")
 		resConf := &subsystems.ResourceConfig{
 			MemoryLimit: context.String("m"),
 			CPUSet:      context.String("cpuset"),
 			CPUShare:    context.String("cpushare"),
 		}
-		Run(tty, cmdArray, resConf)
+		Run(tty, volume, cmdArray, resConf)
 		return nil
 	},
 }
@@ -54,6 +59,7 @@ var initCommand = cli.Command{
 	Usage: "Init container process run user's process in container. Do not call it outside",
 	Action: func(context *cli.Context) error {
 		log.Infof("init come on")
+		// Will never return if success.
 		return container.RunContainerInitProcess()
 	},
 }

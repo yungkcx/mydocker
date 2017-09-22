@@ -15,6 +15,4 @@ mydocker
 .glide/
 
 # Files or directories of the container
-busybox
-busybox.tar
-overlay
+cmnt

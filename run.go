@@ -11,8 +11,10 @@ import (
 )
 
 // Run runs command with console if tty.
-func Run(tty bool, comArray []string, res *subsystems.ResourceConfig) {
-	parent, writePipe := container.NewParentProcess(tty)
+func Run(tty bool, volume string, comArray []string, res *subsystems.ResourceConfig) {
+	rootURL := "/root/container"
+	parent, writePipe := container.NewParentProcess(tty, volume, rootURL)
+
 	if parent == nil {
 		log.Errorf("New parent process error")
 		return
@@ -26,8 +28,11 @@ func Run(tty bool, comArray []string, res *subsystems.ResourceConfig) {
 	cgroupManager.Apply(parent.Process.Pid)
 
 	log.Infoln("Parent process started, sending commands")
+	comArray = append([]string{volume, rootURL}, comArray...)
 	sendInitCommand(comArray, writePipe)
 	parent.Wait()
+
+	container.DeleteWorkSpace(volume, rootURL)
 }
 
 func sendInitCommand(comArray []string, writePipe *os.File) {

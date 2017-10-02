@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/yungkcx/mydocker/util"
 )
 
 // RunContainerInitProcess is a function.
@@ -19,6 +20,7 @@ func RunContainerInitProcess() error {
 	if err := setupMount(volume, rootURL); err != nil {
 		return err
 	}
+
 	containerCommand := args[2]
 	path, err := exec.LookPath(containerCommand)
 	if err != nil {
@@ -143,7 +145,7 @@ func setupMount(volume string, rootURL string) error {
 
 func mountVolume(rootURL string, volumeURLs []string) error {
 	parentURL := volumeURLs[0]
-	if exist, err := pathExist(parentURL); err != nil {
+	if exist, err := util.PathExist(parentURL); err != nil {
 		return err
 	} else if !exist {
 		if err := os.Mkdir(parentURL, 0777); err != nil {
@@ -151,7 +153,7 @@ func mountVolume(rootURL string, volumeURLs []string) error {
 		}
 	}
 	containerURL := filepath.Join(rootURL, "merged", volumeURLs[1])
-	if exist, err := pathExist(containerURL); err != nil {
+	if exist, err := util.PathExist(containerURL); err != nil {
 		return err
 	} else if !exist {
 		if err := os.Mkdir(containerURL, 0777); err != nil {

@@ -2,12 +2,14 @@ package container
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/yungkcx/mydocker/util"
 )
 
 // NewPipe returns a pipe.
@@ -50,9 +52,6 @@ func NewParentProcess(tty bool, volume string, rootURL string) (*exec.Cmd, *os.F
 
 // NewWorkSpace create a new volume mount point for the container.
 func NewWorkSpace(rootURL string) error {
-	if err := createReadonlyLayer(rootURL); err != nil {
-		return err
-	}
 	if err := createWriteLayer(rootURL); err != nil {
 		return err
 	}
@@ -68,14 +67,28 @@ func createMountPoint(rootURL string) error {
 	if err := os.Mkdir(mergedDir, 0777); err != nil && os.IsNotExist(err) {
 		return fmt.Errorf("Error: %v", err)
 	}
+	lowerID, err := getLowerID(rootURL)
+	log.Infof("Used image: %s", lowerID)
+	if err != nil {
+		return err
+	}
+	lowerdir := filepath.Join(util.ImagesDir, lowerID)
 	upperdir := filepath.Join(rootURL, "upper")
-	lowerdir := filepath.Join(rootURL, "busybox")
 	workdir := filepath.Join(rootURL, "work")
 	dirs := "upperdir=" + upperdir + ",lowerdir=" + lowerdir + ",workdir=" + workdir
 	if err := syscall.Mount("overlay", mergedDir, "overlay", 0, dirs); err != nil {
 		return fmt.Errorf("Error mounting overlayfs: %v", err)
 	}
 	return nil
+}
+
+func getLowerID(root string) (string, error) {
+	lowerIDPath := filepath.Join(root, "lower-id")
+	b, err := ioutil.ReadFile(lowerIDPath)
+	if err != nil {
+		return "", fmt.Errorf("Error ReadFile: %v", err)
+	}
+	return string(b), nil
 }
 
 func createWriteLayer(rootURL string) error {
@@ -90,27 +103,8 @@ func createWriteLayer(rootURL string) error {
 	return nil
 }
 
-func createReadonlyLayer(rootURL string) error {
-	busyboxURL := filepath.Join(rootURL, "busybox")
-	if _, err := pathExist(busyboxURL); err != nil {
-		return err
-	}
-	return nil
-}
-
-func pathExist(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, fmt.Errorf("Error judging whether %s exists: %v", path, err)
-}
-
 // DeleteWorkSpace delete the overlayfs workspace.
-func DeleteWorkSpace(volume string, rootURL string) error {
+func DeleteWorkSpace(rootURL string) error {
 	if err := deleteMountPoint(rootURL); err != nil {
 		return err
 	}

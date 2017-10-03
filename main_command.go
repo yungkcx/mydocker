@@ -7,12 +7,13 @@ import (
 	"github.com/urfave/cli"
 	"github.com/yungkcx/mydocker/cgroups/subsystems"
 	"github.com/yungkcx/mydocker/container"
-	"github.com/yungkcx/mydocker/images"
+	"github.com/yungkcx/mydocker/image"
 )
 
 var runCommand = cli.Command{
-	Name:  "run",
-	Usage: `Create a container with namespace and cgroups limit mydocker run -ti [command]`,
+	Name:      "run",
+	ArgsUsage: "IMAGE",
+	Usage:     `Create a container with namespace and cgroups limit mydocker run -ti [command]`,
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name:  "ti",
@@ -36,7 +37,10 @@ var runCommand = cli.Command{
 		},
 	},
 	Action: func(context *cli.Context) error {
-		var cmdArray []string
+		imageName := context.Args().Get(0)
+		tty := context.Bool("ti")
+		volume := context.String("v")
+		cmdArray := []string{}
 		if context.NArg() < 1 {
 			return fmt.Errorf("Missing image name")
 		} else if context.NArg() == 1 {
@@ -46,15 +50,12 @@ var runCommand = cli.Command{
 				cmdArray = append(cmdArray, arg)
 			}
 		}
-		image := context.Args().Get(0)
-		tty := context.Bool("ti")
-		volume := context.String("v")
 		resConf := &subsystems.ResourceConfig{
 			MemoryLimit: context.String("m"),
 			CPUSet:      context.String("cpuset"),
 			CPUShare:    context.String("cpushare"),
 		}
-		return Run(image, tty, volume, cmdArray, resConf)
+		return Run(imageName, tty, volume, cmdArray, resConf)
 	},
 }
 
@@ -72,7 +73,7 @@ var imagesCommand = cli.Command{
 	Name:  "images",
 	Usage: "List images",
 	Action: func(context *cli.Context) error {
-		return images.ListImages()
+		return image.ListImages()
 	},
 }
 
@@ -91,6 +92,27 @@ var imageCommand = cli.Command{
 			return fmt.Errorf("Missing tar file")
 		}
 		name := context.String("o")
-		return images.CreateImage(context.Args().Get(0), name)
+		return image.CreateImage(context.Args().Get(0), name)
+	},
+}
+
+var psCommand = cli.Command{
+	Name:  "ps",
+	Usage: "List containers",
+	Action: func(context *cli.Context) error {
+		return container.ListContainers()
+	},
+}
+
+var rmiCommand = cli.Command{
+	Name:      "rmi",
+	ArgsUsage: "IMAGE...",
+	Usage:     "Remove image",
+	Action: func(context *cli.Context) error {
+		if context.NArg() < 1 {
+			return fmt.Errorf("Missing image name")
+		}
+		names := context.Args()
+		return image.RemoveImage(names...)
 	},
 }

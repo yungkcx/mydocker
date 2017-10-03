@@ -17,6 +17,8 @@ func main() {
 		runCommand,
 		imagesCommand,
 		imageCommand,
+		psCommand,
+		rmiCommand,
 	}
 
 	app.Before = func(context *cli.Context) error {

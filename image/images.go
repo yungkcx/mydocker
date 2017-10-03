@@ -1,4 +1,4 @@
-package images
+package image
 
 import "github.com/yungkcx/mydocker/util"
 
@@ -25,20 +25,20 @@ func getImages() ([]string, error) {
 	}
 	names, err := f.Readdirnames(-1)
 	if err != nil {
-		return nil, fmt.Errorf("Error read MydockerRootDir: %v", err)
+		return nil, fmt.Errorf("Error read ImagesDir: %v", err)
 	}
 	return names, nil
 }
 
 // IsImageExist returns true if image is exist, or false else.
-func IsImageExist(image string) (bool, error) {
+func IsImageExist(imageName string) (bool, error) {
 	names, err := getImages()
 	if err != nil {
 		return false, err
 	}
 
 	for _, name := range names {
-		if image == name {
+		if imageName == name {
 			return true, nil
 		}
 	}
@@ -83,5 +83,21 @@ func CreateImage(tar string, name string) error {
 		return fmt.Errorf("Error running %s: %v", tar, err)
 	}
 
+	return nil
+}
+
+// RemoveImage removes an image.
+func RemoveImage(names ...string) error {
+	removed := []string{}
+	for _, name := range names {
+		dir := filepath.Join(util.ImagesDir, name)
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("Error remove image %s: %v", dir, err)
+		}
+		removed = append(removed, name)
+	}
+	for _, name := range removed {
+		fmt.Println(name)
+	}
 	return nil
 }

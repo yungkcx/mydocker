@@ -16,6 +16,7 @@ import (
 // RunContainerInitProcess is a function.
 func RunContainerInitProcess() error {
 	args := readUserCommand()
+	log.Infof("Command all is %s", args[2:])
 	volume, rootURL := args[0], args[1]
 	if err := setupMount(volume, rootURL); err != nil {
 		return err

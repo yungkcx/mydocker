@@ -19,6 +19,10 @@ var runCommand = cli.Command{
 			Name:  "ti",
 			Usage: "enable tty",
 		},
+		cli.BoolFlag{
+			Name:  "d",
+			Usage: "detach container",
+		},
 		cli.StringFlag{
 			Name:  "v",
 			Usage: "volume",
@@ -39,8 +43,13 @@ var runCommand = cli.Command{
 	Action: func(context *cli.Context) error {
 		imageName := context.Args().Get(0)
 		tty := context.Bool("ti")
+		detach := context.Bool("d")
+		if tty && detach {
+			return fmt.Errorf("Option -ti and -d can't both provided")
+		}
 		volume := context.String("v")
 		cmdArray := []string{}
+
 		if context.NArg() < 1 {
 			return fmt.Errorf("Missing image name")
 		} else if context.NArg() == 1 {
@@ -114,5 +123,18 @@ var rmiCommand = cli.Command{
 		}
 		names := context.Args()
 		return image.RemoveImage(names...)
+	},
+}
+
+var rmCommand = cli.Command{
+	Name:      "rm",
+	ArgsUsage: "CONTAINER...",
+	Usage:     "Remove container",
+	Action: func(context *cli.Context) error {
+		if context.NArg() < 1 {
+			return fmt.Errorf("Missing container name")
+		}
+		names := context.Args()
+		return container.RemoveContainer(names...)
 	},
 }

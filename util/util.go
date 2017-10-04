@@ -6,7 +6,7 @@ import (
 )
 
 // Some directory names.
-const (
+var (
 	MydockerRootDir = "/var/lib/mydocker/"
 	ImagesDir       = MydockerRootDir + "images/"
 	ContainersDir   = MydockerRootDir + "containers/"
@@ -22,4 +22,14 @@ func PathExist(path string) (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("Error judging whether %s exists: %v", path, err)
+}
+
+// BKDRHash is a string hash function.
+func BKDRHash(s string) uint64 {
+	seed := uint64(131)
+	hash := uint64(0)
+	for _, ch := range s {
+		hash = hash*seed + uint64(ch)
+	}
+	return hash & 0x7fffffff
 }

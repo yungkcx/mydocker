@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 
 	log "github.com/Sirupsen/logrus"
@@ -15,16 +13,13 @@ import (
 )
 
 // Run runs command with console if tty.
-func Run(imageName string, tty bool, volume string, comArray []string, res *subsystems.ResourceConfig) error {
+func Run(imageName string, tty bool, volume string, cmdArray []string, res *subsystems.ResourceConfig) error {
 	containerRoot, err := container.NewContainer(imageName)
 	if err != nil {
 		return err
 	}
 	// New containerProcess process.
 	containerProcess, writePipe := container.NewParentProcess(tty, volume, containerRoot)
-	if err := ioutil.WriteFile(filepath.Join(containerRoot, "lower-id"), []byte(imageName), 0744); err != nil {
-		return fmt.Errorf("Error write to %s: %v", filepath.Join(containerRoot, "lower-id"), err)
-	}
 	defer container.DeleteWorkSpace(containerRoot)
 
 	if containerProcess == nil {
@@ -33,24 +28,33 @@ func Run(imageName string, tty bool, volume string, comArray []string, res *subs
 	if err := containerProcess.Start(); err != nil {
 		return fmt.Errorf("Error containerProcess starting: %v", err)
 	}
+	containerPid := containerProcess.Process.Pid
+	if err := container.SetConfigFile(imageName, containerRoot, cmdArray, containerPid); err != nil {
+		return err
+	}
+
 	cgroupManager := cgroups.NewCgroupManager("mydocker-cgroup")
 	defer cgroupManager.Destroy()
 	cgroupManager.Set(res)
-	cgroupManager.Apply(containerProcess.Process.Pid)
+	cgroupManager.Apply(containerPid)
 
 	log.Infoln("Container process started, sending commands")
-	comArray = append([]string{volume, containerRoot}, comArray...)
-	log.Infoln(comArray)
-	sendInitCommand(comArray, writePipe)
+	cmdArray = append([]string{volume, containerRoot}, cmdArray...)
+	sendInitCommand(cmdArray, writePipe)
 	// Ingore SIGINT to destroy container.
 	signal.Ignore(os.Interrupt)
-	containerProcess.Wait()
+	if tty {
+		containerProcess.Wait()
+		if err := container.ExitInfo(containerRoot); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
 
-func sendInitCommand(comArray []string, writePipe *os.File) {
-	command := strings.Join(comArray, " ")
+func sendInitCommand(cmdArray []string, writePipe *os.File) {
+	command := strings.Join(cmdArray, " ")
 	writePipe.WriteString(command)
 	writePipe.Close()
 }

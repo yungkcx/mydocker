@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/yungkcx/mydocker/image"
 	"github.com/yungkcx/mydocker/util"
 )
 
@@ -20,28 +19,6 @@ func NewPipe() (*os.File, *os.File, error) {
 		return nil, nil, err
 	}
 	return read, write, nil
-}
-
-// NewContainer returns rootdir of the new container and error.
-func NewContainer(imageName string) (string, error) {
-	// Create container's directory and lower-id file.
-	if exist, err := image.IsImageExist(imageName); !exist {
-		if err != nil {
-			return "", err
-		}
-		return "", fmt.Errorf("Image is no exist: %s", imageName)
-	}
-	containerName := newContainerName(imageName)
-	containerRoot := filepath.Join(util.ContainersDir, containerName)
-	if err := os.MkdirAll(containerRoot, 0700); err != nil {
-		return "", fmt.Errorf("Error: %v", err)
-	}
-	return containerRoot, nil
-}
-
-func newContainerName(imageName string) string {
-	// TODO: generate an unique name
-	return imageName
 }
 
 // NewParentProcess use init command to init container.

@@ -88,15 +88,17 @@ func CreateImage(tar string, name string) error {
 
 // RemoveImage removes an image.
 func RemoveImage(names ...string) error {
-	removed := []string{}
 	for _, name := range names {
 		dir := filepath.Join(util.ImagesDir, name)
+		if exist, err := util.PathExist(dir); !exist {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if err := os.RemoveAll(dir); err != nil {
 			return fmt.Errorf("Error remove image %s: %v", dir, err)
 		}
-		removed = append(removed, name)
-	}
-	for _, name := range removed {
 		fmt.Println(name)
 	}
 	return nil
